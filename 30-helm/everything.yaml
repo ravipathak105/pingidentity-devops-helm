@@ -1,53 +1,137 @@
-############################################################
-# Ping Identity
-#
-############################################################
+global:
+  imagePullSecrets:
+   - name: jfrog-registry-secret
+  ingress:
+    enabled: true
+    addReleaseNameToHost: none
+    defaultDomain: "dev-customerdirectory.nonp.aws3.uk.tsb"
 
-pingaccess-admin:
-  enabled: true
-  privateCert:
-    generate: true
-  envs:
-    SERVER_PROFILE_URL: https://github.com/pingidentity/pingidentity-server-profiles.git
-    SERVER_PROFILE_PATH: baseline/pingaccess
-  container:
-    waitFor:
-      pingfederate-engine:
-        service: https
-        timeoutSeconds: 300
+    defaultTlsSecret:
+    annotations:
+      alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80},{"HTTPS": 443}]'
+      alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:eu-west-2:337141981580:certificate/ecd6b533-5eea-4eb5-8505-e7c27d8d2d86
+      alb.ingress.kubernetes.io/inbound-cidrs: 172.16.0.0/16
+      alb.ingress.kubernetes.io/scheme: internal
+      alb.ingress.kubernetes.io/backend-protocol: HTTPS
+      alb.ingress.kubernetes.io/target-type: ip
+    spec:
+      ingressClassName: alb
 
-pingaccess-engine:
-  enabled: true
-  envs:
-    SERVER_PROFILE_URL: https://github.com/pingidentity/pingidentity-server-profiles.git
-    SERVER_PROFILE_PATH: baseline/pingaccess
-
-pingdataconsole:
-  enabled: true
-  envs:
-    SERVER_PROFILE_URL: https://github.com/pingidentity/pingidentity-server-profiles.git
-    SERVER_PROFILE_PATH: baseline/pingdataconsole
-
-pingauthorize:
-  enabled: true
-  envs:
-    SERVER_PROFILE_URL: https://github.com/pingidentity/pingidentity-server-profiles.git
-    SERVER_PROFILE_PATH: baseline/pingauthorize
-
-pingdirectory:
-  enabled: true
-  envs:
-    SERVER_PROFILE_URL: https://github.com/pingidentity/pingidentity-server-profiles.git
-    SERVER_PROFILE_PATH: baseline/pingdirectory
 
 pingfederate-admin:
   enabled: true
+  image:
+    repository: tsbbuild.jfrog.io/pvs-docker-snapshot
+    name: ping-federate-alpine
+    tag: 1.0.44
+  # imagePullSecrets:
+  #   - name: jfrog-registry-secret
+  secretVolumes:
+    pingfederate-license:
+      items:
+        PingFederate-11.3-Development.lic: /opt/in/instance/server/default/conf/pingfederate.lic
   envs:
-    SERVER_PROFILE_URL: https://github.com/pingidentity/pingidentity-server-profiles.git
+    SERVER_PROFILE_URL: 'https://github.com/pingidentity/pingidentity-server-profiles.git'
     SERVER_PROFILE_PATH: baseline/pingfederate
+    PING_IDENTITY_ACCEPT_EULA: "YES"
+  workload:
+    type: StatefulSet
+    statefulSet:
+      persistentvolume:
+        enabled: true
+        volumes:
+          out-dir:
+            mountPath: /opt/out
+            persistentVolumeClaim:
+              accessModes:
+              - ReadWriteOnce
+              storageClassName: ping-gp3
+              resources:
+                requests:
+                  storage: 4Gi
+  services:
+    https:
+      servicePort: 9999
+      containerPort: 9999
+      ingressPort: 443
+      dataService: true
+    clusterbind:
+      servicePort: 7600
+      containerPort: 7600
+      clusterService: true
+    clusterfail:
+      servicePort: 7700
+      containerPort: 7700
+      clusterService: true
+    clusterServiceName: pingfederate-cluster
+  ingress:
+    hosts:
+      - host: pingfederate-admin._defaultDomain_
+        paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            serviceName: https
+    tls:
+      - secretName: _defaultTlsSecret_
+        hosts:
+          - pingfederate-admin._defaultDomain_
 
 pingfederate-engine:
   enabled: true
+  image:
+    repository: tsbbuild.jfrog.io/pvs-docker-snapshot
+    name: ping-federate-alpine
+    tag: 1.0.44
+  # imagePullSecrets:
+  #   - name: jfrog-registry-secret
+  secretVolumes:
+    pingfederate-license:
+      items:
+        PingFederate-11.3-Development.lic: /opt/in/instance/server/default/conf/pingfederate.lic
+  workload:
+    type: StatefulSet
+    statefulSet:
+      persistentvolume:
+        enabled: true
+        volumes:
+          out-dir:
+            mountPath: /opt/out
+            persistentVolumeClaim:
+              accessModes:
+              - ReadWriteOnce
+              storageClassName: ping-gp3
+              resources:
+                requests:
+                  storage: 4Gi
   envs:
-    SERVER_PROFILE_URL: https://github.com/pingidentity/pingidentity-server-profiles.git
+    SERVER_PROFILE_URL: 'https://github.com/pingidentity/pingidentity-server-profiles.git'
     SERVER_PROFILE_PATH: baseline/pingfederate
+    PING_IDENTITY_ACCEPT_EULA: "YES"
+  services:
+    https:
+      servicePort: 9031
+      containerPort: 9031
+      ingressPort: 443
+      dataService: true
+    clusterbind:
+      servicePort: 7600
+      containerPort: 7600
+      clusterService: true
+    clusterfail:
+      servicePort: 7700
+      containerPort: 7700
+      clusterService: true
+    clusterServiceName: pingfederate-cluster
+  ingress:
+    hosts:
+      - host: pingfederate-engine._defaultDomain_
+        paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            serviceName: https
+    tls:
+      - secretName: _defaultTlsSecret_
+        hosts:
+          - pingfederate-engine._defaultDomain_
